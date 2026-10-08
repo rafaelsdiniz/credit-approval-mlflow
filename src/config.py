@@ -23,7 +23,26 @@ def carregar_config(caminho_yaml, sobrescritas=None):
         valor = yaml.safe_load(valor_texto)
         _definir_chave(config, chave.split("."), valor)
 
-    return config
+    return _corrigir_numeros(config)
+
+
+def _corrigir_numeros(valor):
+    """
+    Converte strings que na verdade são números (ex.: "1e-3") para float.
+    Por quê: o PyYAML só reconhece notação científica com ponto ("1.0e-3");
+    "1e-3" vira a STRING '1e-3' e o Adam quebra ao comparar weight_decay com 0.0.
+    (Esse foi o incidente registrado na run com falha; ver README.)
+    """
+    if isinstance(valor, dict):
+        return {k: _corrigir_numeros(v) for k, v in valor.items()}
+    if isinstance(valor, list):
+        return [_corrigir_numeros(v) for v in valor]
+    if isinstance(valor, str):
+        try:
+            return float(valor)
+        except ValueError:
+            return valor
+    return valor
 
 
 def _definir_chave(dicionario, partes, valor):
