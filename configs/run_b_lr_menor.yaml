@@ -1,0 +1,29 @@
+# Rodada B — TAXA DE APRENDIZADO MENOR (slide 10: lr 0.001, L2 0).
+# Tudo igual à rodada A, exceto treino.lr.
+
+experimento:
+  nome: "credit_approval_mlp"
+  run_name: "B_lr_menor"
+  pergunta: "Uma MLP com 1 camada oculta de 16 neurônios (como no código da aula) classifica bem aprovação de crédito?"
+  hipotese: "Com lr=0.001 os passos do Adam são 10x menores: a curva deve ficar mais suave e estável, demorar mais épocas para convergir e talvez chegar a uma val_loss mínima menor do que em A."
+  tracking_uri: "sqlite:///mlflow.db"
+
+seed: 42
+
+dados:
+  caminho_local: "data/crx.data"
+  uci_id: 27
+  frac_val: 0.15
+  frac_test: 0.15
+  estratificado: true
+
+modelo:
+  camadas_ocultas: [16]
+  dropout: 0.0
+
+treino:
+  lr: 0.001                           # (*) 10x menor que A
+  weight_decay: 0.0
+  batch_size: 32
+  epocas: 200
+  paciencia: 20

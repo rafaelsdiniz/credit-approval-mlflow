@@ -1,0 +1,30 @@
+# Rodada A — REFERÊNCIA (slide 10 do professor: lr 0.01, L2 0).
+# Mesma arquitetura, split, seed e épocas das rodadas B e C. Só o que está marcado com (*) muda entre elas.
+# Qualquer chave pode ser sobrescrita na linha de comando: --set treino.lr=0.005
+
+experimento:
+  nome: "credit_approval_mlp"         # nome do experimento no MLflow (as 5 rodadas ficam juntas para comparar)
+  run_name: "A_referencia"            # nome desta rodada
+  pergunta: "Uma MLP com 1 camada oculta de 16 neurônios (como no código da aula) classifica bem aprovação de crédito?"
+  hipotese: "Com lr=0.01 e sem regularização a rede aprende rápido, mas deve começar a sobreajustar depois de poucas épocas (val_loss sobe enquanto train_loss cai). Serve de referência para B e C."
+  tracking_uri: "sqlite:///mlflow.db"
+
+seed: 42                              # semente fixa: pesos iniciais, embaralhamento e split iguais em todas as rodadas
+
+dados:
+  caminho_local: "data/crx.data"      # cópia local do dataset (baixada do UCI na 1ª vez)
+  uci_id: 27                          # id do Credit Approval no UCI
+  frac_val: 0.15                      # 15% validação
+  frac_test: 0.15                     # 15% teste (sobra 70% treino)
+  estratificado: true                 # mantém a proporção aprovado/rejeitado em cada conjunto
+
+modelo:
+  camadas_ocultas: [16]               # 1 camada oculta com 16 neurônios (igual ao script da aula)
+  dropout: 0.0
+
+treino:
+  lr: 0.01                            # (*) taxa de aprendizado do Adam
+  weight_decay: 0.0                   # (*) regularização L2
+  batch_size: 32
+  epocas: 200                         # máximo de épocas
+  paciencia: 20                       # early stopping: para se a val_loss não melhorar por 20 épocas

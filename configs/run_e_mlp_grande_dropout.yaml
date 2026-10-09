@@ -1,0 +1,29 @@
+# Rodada E — NOVA RUN APÓS O DIAGNÓSTICO DE D: MLP maior + dropout 0.3.
+# "Sintoma -> hipótese -> nova run": D sobreajustou; esta rodada testa se o dropout reduz o problema.
+
+experimento:
+  nome: "credit_approval_mlp"
+  run_name: "E_mlp_grande_dropout"
+  pergunta: "Uma MLP maior (128-64) melhora o resultado ou só aumenta o overfitting num dataset de 690 linhas?"
+  hipotese: "Sintoma em D: val_loss dispara a partir da época 4. Hipótese: capacidade demais para poucos dados. Com dropout=0.3 a rede não consegue decorar tão fácil, então a melhor época deve vir mais tarde e a val_loss subir mais devagar."
+  tracking_uri: "sqlite:///mlflow.db"
+
+seed: 42
+
+dados:
+  caminho_local: "data/crx.data"
+  uci_id: 27
+  frac_val: 0.15
+  frac_test: 0.15
+  estratificado: true
+
+modelo:
+  camadas_ocultas: [128, 64]
+  dropout: 0.3                        # (*) dropout de 30% nas camadas ocultas
+
+treino:
+  lr: 0.01
+  weight_decay: 0.0
+  batch_size: 32
+  epocas: 200
+  paciencia: 20

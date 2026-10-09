@@ -14,8 +14,8 @@ O que mudou (e por quê):
   * figuras salvas como artefatos em vez de plt.show().
 
 Uso:
-  python -m src.train --config configs/exp01_mlp_pequena.yaml
-  python -m src.train --config configs/exp02_mlp_grande.yaml --set modelo.dropout=0.3 --set experimento.run_name=mlp_128_64_dropout03
+  python -m src.train --config configs/run_a_referencia.yaml
+  python -m src.train --config configs/run_a_referencia.yaml --set treino.lr=0.005 --set experimento.run_name=A_lr_0005
 """
 
 import argparse
@@ -47,7 +47,7 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.config import achatar_config, carregar_config
-from src.data import carregar_dados, dividir_dados
+from src.data import carregar_dados, descrever_divisao, dividir_dados
 from src.features import (
     ajustar_e_transformar,
     criar_preprocessador,
@@ -171,6 +171,7 @@ def executar(config):
         # --- Tags e parâmetros: o "contexto" da run -------------------------------
         mlflow.set_tags({
             "pergunta": cfg_exp["pergunta"],
+            "hipotese": cfg_exp.get("hipotese", ""),   # por que esta rodada está sendo executada
             "dataset": "Credit Approval (UCI id=27)",
             "device": str(device),
             "codigo_base": "AI-Lab/mlp_torch_avaliacao.py",
@@ -187,8 +188,13 @@ def executar(config):
                 mlflow.set_tag("origem_dados", origem)
 
                 X_train, X_val, X_test, y_train, y_val, y_test = dividir_dados(
-                    df, cfg_dados["frac_val"], cfg_dados["frac_test"], config["seed"]
+                    df, cfg_dados["frac_val"], cfg_dados["frac_test"], config["seed"],
+                    estratificado=cfg_dados.get("estratificado", True),
                 )
+                # Registra COMO os dados foram divididos: índice de cada linha e o conjunto para onde foi.
+                # Com a mesma seed esse arquivo é idêntico em todas as rodadas (prova de que o split não mudou).
+                mlflow.log_text(descrever_divisao(X_train, X_val, X_test, y_train, y_val, y_test),
+                                "divisao_dados.csv")
                 # Pré-processador ajustado SÓ no treino (correção do vazamento de dados)
                 preprocessador = criar_preprocessador()
                 Xtr, Xva, Xte = ajustar_e_transformar(preprocessador, X_train, X_val, X_test)

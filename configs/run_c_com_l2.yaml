@@ -1,0 +1,29 @@
+# Rodada C — COM REGULARIZAÇÃO L2 (slide 10: lr 0.01, L2 1e-5).
+# Tudo igual à rodada A, exceto treino.weight_decay.
+
+experimento:
+  nome: "credit_approval_mlp"
+  run_name: "C_com_l2"
+  pergunta: "Uma MLP com 1 camada oculta de 16 neurônios (como no código da aula) classifica bem aprovação de crédito?"
+  hipotese: "Se o sobreajuste visto em A vem de pesos crescendo demais, a penalização L2 (weight_decay=1e-5) deve segurar a subida da val_loss e adiar a melhor época. Se 1e-5 for fraco demais, o resultado será praticamente igual ao de A."
+  tracking_uri: "sqlite:///mlflow.db"
+
+seed: 42
+
+dados:
+  caminho_local: "data/crx.data"
+  uci_id: 27
+  frac_val: 0.15
+  frac_test: 0.15
+  estratificado: true
+
+modelo:
+  camadas_ocultas: [16]
+  dropout: 0.0
+
+treino:
+  lr: 0.01
+  weight_decay: 1.0e-5                # (*) regularização L2 (escrito com ponto: o YAML só entende 1.0e-5 como número)
+  batch_size: 32
+  epocas: 200
+  paciencia: 20

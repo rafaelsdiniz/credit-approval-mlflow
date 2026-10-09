@@ -39,7 +39,7 @@ def main():
     experimentos = mlflow.search_experiments()
     nomes = [e.name for e in experimentos if e.name != "Default"]
     if not nomes:
-        print("Nenhum experimento encontrado. Rode primeiro: python -m src.train --config configs/exp01_mlp_pequena.yaml")
+        print("Nenhum experimento encontrado. Rode primeiro: python -m src.train --config configs/run_a_referencia.yaml")
         return
 
     runs = mlflow.search_runs(experiment_names=nomes, filter_string="attributes.status = 'FINISHED'")

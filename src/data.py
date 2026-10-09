@@ -58,13 +58,15 @@ def limpar_dados(df):
     return df
 
 
-def dividir_dados(df, frac_val, frac_test, seed):
+def dividir_dados(df, frac_val, frac_test, seed, estratificado=True):
     """
     Divide em treino / validação / teste de forma ESTRATIFICADA (mesma proporção de
     aprovados/rejeitados em cada parte). Duas chamadas de train_test_split, como no código da aula.
 
     Por quê estratificar: o dataset é pequeno (690 linhas) e levemente desbalanceado;
     sem estratificação um conjunto poderia ficar com proporção diferente dos outros.
+    Por quê random_state=seed: a mesma seed produz exatamente o mesmo split em todas as rodadas,
+    então as rodadas são comparáveis (só a configuração muda, os dados não).
     """
     X = df[COLUNAS_ATRIBUTOS]
     y = df[COLUNA_ALVO]
@@ -72,10 +74,30 @@ def dividir_dados(df, frac_val, frac_test, seed):
     # 1º corte: separa (val + teste) do treino
     frac_temp = frac_val + frac_test
     X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=frac_temp, random_state=seed, stratify=y
+        X, y, test_size=frac_temp, random_state=seed, stratify=y if estratificado else None
     )
     # 2º corte: divide a parte temporária entre validação e teste
     X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=frac_test / frac_temp, random_state=seed, stratify=y_temp
+        X_temp, y_temp, test_size=frac_test / frac_temp, random_state=seed,
+        stratify=y_temp if estratificado else None,
     )
     return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+def descrever_divisao(X_train, X_val, X_test, y_train, y_val, y_test):
+    """
+    Gera um CSV (texto) com uma linha por amostra: índice original, conjunto e classe.
+    Serve como artefato no MLflow para provar como o split foi feito e que ele é o mesmo em todas as rodadas.
+    """
+    partes = [
+        pd.DataFrame({"indice": X_train.index, "conjunto": "treino", "classe": y_train.values}),
+        pd.DataFrame({"indice": X_val.index, "conjunto": "validacao", "classe": y_val.values}),
+        pd.DataFrame({"indice": X_test.index, "conjunto": "teste", "classe": y_test.values}),
+    ]
+    tabela = pd.concat(partes).sort_values("indice")
+    resumo = tabela.groupby("conjunto")["classe"].agg(["count", "mean"]).rename(
+        columns={"count": "n", "mean": "proporcao_aprovados"}
+    )
+    cabecalho = "# Divisão estratificada com seed fixa. Resumo por conjunto:\n"
+    cabecalho += "".join(f"#   {c}: n={int(r.n)}, aprovados={r.proporcao_aprovados:.3f}\n" for c, r in resumo.iterrows())
+    return cabecalho + tabela.to_csv(index=False)
