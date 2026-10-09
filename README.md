@@ -79,7 +79,14 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 ```
 
-**Opção B — conda**
+**Opção B — Linux / macOS (script pronto)**
+
+```bash
+bash setup.sh                 # cria o .venv e instala tudo (torch CPU + requirements)
+source .venv/bin/activate
+```
+
+**Opção C — conda**
 
 ```bash
 conda env create -f environment.yml
