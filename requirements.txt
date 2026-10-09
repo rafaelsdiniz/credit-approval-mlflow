@@ -1,6 +1,6 @@
 # Dependências do projeto (versões mínimas; o torch é instalado na versão CPU, ver README)
 torch>=2.2
-mlflow>=2.12
+mlflow>=2.14
 scikit-learn>=1.4
 pandas>=2.0
 numpy>=1.26

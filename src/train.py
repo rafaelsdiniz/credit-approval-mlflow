@@ -1,7 +1,7 @@
 """
 Pipeline principal: treino -> validação -> teste, com rastreamento no MLflow.
 
-Baseado em mlp_torch_avaliacao.py (código da aula, prof. Marco Sousa / AI-Lab):
+Baseado em mlp_torch_avaliacao.py (código da aula, repositório sousamaf/AI-Lab):
 mesma rede (nn.Module), mesma perda (CrossEntropyLoss), mesmo otimizador (Adam),
 mesmo loop manual de treino/validação e mesmas métricas (precision, recall, F1, matriz de confusão).
 
