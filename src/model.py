@@ -1,10 +1,4 @@
-"""
-Definição da rede neural (MLP) em PyTorch.
-
-É a mesma ideia da classe IrisModel do código da aula (Linear -> ReLU -> Linear),
-só que o número e o tamanho das camadas ocultas vêm da configuração.
-Ex.: camadas_ocultas=[16] reproduz a arquitetura da aula; [128, 64] cria uma rede maior.
-"""
+"""MLP (Linear -> ReLU -> Linear) como na aula, mas com as camadas ocultas vindas da config."""
 
 import torch.nn as nn
 
@@ -18,11 +12,9 @@ class MLP(nn.Module):
             camadas.append(nn.Linear(tamanho_anterior, n_neuronios))
             camadas.append(nn.ReLU())
             if dropout > 0:
-                # Dropout desliga neurônios aleatoriamente no treino: ajuda a reduzir overfitting
                 camadas.append(nn.Dropout(dropout))
             tamanho_anterior = n_neuronios
-        # Camada de saída: 2 logits (rejeitado / aprovado).
-        # A CrossEntropyLoss aplica o softmax internamente, igual ao código da aula.
+        # Saída: 2 logits; a CrossEntropyLoss aplica o softmax
         camadas.append(nn.Linear(tamanho_anterior, n_classes))
         self.rede = nn.Sequential(*camadas)
 

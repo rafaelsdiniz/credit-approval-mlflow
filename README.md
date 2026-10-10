@@ -21,7 +21,7 @@ source .venv/bin/activate            # .\.venv\Scripts\Activate.ps1
                                      # pip install torch --index-url https://download.pytorch.org/whl/cpu
                                      # pip install -r requirements.txt
 
-bash run_all.sh                      # .\run_all.ps1   -> executa as 5 rodadas (~3 min na CPU)
+bash run_all.sh                      # .\run_all.ps1   -> executa as 5 rodadas (~1 min na CPU)
 mlflow ui --backend-store-uri sqlite:///mlflow.db     # abre http://127.0.0.1:5000
 ```
 
@@ -65,24 +65,49 @@ investigação extra com uma MLP maior. Toda rodada registra sua **pergunta** e 
 
 O conjunto de teste é usado **uma única vez**, no final, com os pesos da melhor época.
 
-## Resultados (seed 42)
+## Resultados (seed 42, torch 2.14.1 CPU)
 
-| Rodada | Melhor época | val_f1 | val_roc_auc | test_accuracy | test_f1 | test_roc_auc |
-|---|---|---|---|---|---|---|
-| **A** referência | 10 | 0,9013 | **0,9722** | **0,8750** | **0,8736** | 0,9520 |
-| B lr menor | 116 | 0,9018 | 0,9714 | 0,8462 | 0,8447 | 0,9472 |
-| C com L2 | 10 | 0,9013 | 0,9703 | 0,8654 | 0,8636 | 0,9475 |
-| D MLP grande | 4 | 0,9214 | 0,9641 | 0,8365 | 0,8362 | 0,9543 |
-| E D + dropout | 11 | 0,9211 | 0,9691 | 0,8558 | 0,8547 | 0,9397 |
+Números reais, copiados do MLflow (`python -m src.comparar`). Negrito = melhor de cada coluna.
 
-**Campeã: rodada A.** Na validação, A, B e C empatam em F1 (0,901, diferença de 1 amostra em 103); A tem a
-maior ROC-AUC e chega lá em 10 épocas, contra 116 de B. A regularização L2 de 1e-5 é fraca demais: a curva de
-C é quase idêntica à de A. D sobreajusta (val_loss sobe a partir da época 4 enquanto a train_loss vai a 0,05);
-o dropout em E adia a melhor época para 11 e melhora o teste, mas não supera A. Avaliada uma única vez no
-teste, A confirmou: F1 0,874, ROC-AUC 0,952.
+| Rodada | Config | Melhor época | val_f1 | val_roc_auc | test_accuracy | test_f1 | test_roc_auc |
+|---|---|---|---|---|---|---|---|
+| **A** referência | [16], lr 0,01 | 10 | 0,9013 | **0,9722** | **0,8750** | **0,8736** | 0,9520 |
+| **B** lr menor | [16], lr 0,001 | 116 | 0,9018 | 0,9714 | 0,8462 | 0,8447 | 0,9472 |
+| **C** com L2 | [16], L2 1e-5 | 10 | 0,9013 | 0,9703 | 0,8654 | 0,8636 | 0,9475 |
+| **D** MLP grande | [128, 64] | 4 | 0,9214 | 0,9641 | 0,8365 | 0,8362 | **0,9543** |
+| **E** D + dropout | [128, 64], dropout 0,3 | 11 | **0,9308** | 0,9695 | 0,8654 | 0,8641 | 0,9442 |
 
-Ressalva: validação e teste têm ~100 amostras cada, logo 1 amostra ≈ 1 ponto percentual. Diferenças de
+![Curvas de perda no treino e na validação das 5 rodadas](docs/comparacao_curvas.png)
+
+*Curvas por época, lidas do `mlflow.db`. O círculo marca a época de menor `val_loss`, cujos pesos o early
+stopping guardou. A e C ficam uma em cima da outra; D dispara depois da época 4; E sobe mais devagar que D.*
+
+### Hipótese × resultado (curvas registradas no MLflow)
+
+- **A** — confirmada. A `val_loss` mínima vem na época 10 (0,233) e depois sobe até 0,315 na época 30,
+  enquanto a `train_loss` cai para 0,149: overfitting leve, controlado pelo early stopping.
+- **B** — confirmada em parte. A curva é mais suave e a `val_loss` mínima é um pouco menor que a de A
+  (0,217 contra 0,233), mas precisou de 116 épocas e no teste ficou pior (F1 0,845).
+- **C** — confirmada a parte "fraco demais". Com L2 de 1e-5 a curva é praticamente idêntica à de A:
+  mesma melhor época (10) e mesma `val_loss` mínima (0,233).
+- **D** — confirmada. Melhor época já na 4; daí em diante a `val_loss` dispara de 0,245 para 0,746
+  enquanto a `train_loss` vai a 0,05 e a acurácia de treino chega a 98 % contra 82 % na validação.
+  Tem o maior ROC-AUC de teste, mas a pior F1 e acurácia: a capacidade extra não vira classificação melhor.
+- **E** — confirmada. O dropout adia a melhor época (4 → 11) e a `val_loss` sobe mais devagar
+  (0,47 na última época, contra 0,75 em D). Melhora o teste em relação a D (F1 0,836 → 0,864), mas não supera A.
+
+### Modelo escolhido: rodada A
+
+A escolha foi feita **na validação, antes de olhar o teste**. A, B e C empatam em `val_f1` (0,901, diferença
+de 1 amostra em 103); E tem `val_f1` maior (0,931, 3 amostras a mais), mas A tem a maior `val_roc_auc`
+(0,972), a curva mais estável, chega lá em 10 épocas e tem 18x menos parâmetros (786 contra 14 402).
+O teste, usado uma única vez, confirmou: A tem a maior acurácia (0,875) e F1 (0,874) entre as cinco rodadas.
+
+**Ressalva:** validação e teste têm ~100 amostras cada, logo 1 amostra ≈ 1 ponto percentual. Diferenças de
 poucos pontos são inconclusivas; a decisão se apoia nas curvas e no histórico, não só no número final.
+
+**Reprodutibilidade:** com a mesma seed, rodar de novo dá exatamente os mesmos números. A rodada E (dropout)
+pode variar entre **versões** do PyTorch, porque o sorteio dos neurônios desligados muda de uma versão para outra.
 
 ## Correção em relação ao script original
 

@@ -1,13 +1,4 @@
-"""
-Imprime uma tabela (Markdown) com as runs de todos os experimentos registrados no MLflow.
-
-Por quê: facilita comparar as runs lado a lado no terminal e copiar os números
-reais para o README sem digitar nada à mão.
-
-Uso:
-  python -m src.comparar                      # usa sqlite:///mlflow.db
-  python -m src.comparar --tracking-uri ...   # outro servidor/arquivo
-"""
+"""Imprime uma tabela Markdown com as runs registradas no MLflow (uso: python -m src.comparar)."""
 
 import argparse
 

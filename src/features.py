@@ -1,10 +1,6 @@
 """
 Pré-processamento das features (imputação, padronização e one-hot).
-
-CORREÇÃO em relação ao código da aula: lá o StandardScaler era ajustado (fit) com
-TODOS os dados antes da divisão, o que vaza informação de validação/teste para o treino.
-Aqui o pré-processador é ajustado SOMENTE no treino e apenas aplicado (transform)
-em validação e teste.
+Correção em relação à aula: o fit acontece SÓ no treino, para não vazar validação/teste.
 """
 
 import numpy as np
@@ -18,11 +14,7 @@ from src.data import COLUNAS_CATEGORICAS, COLUNAS_NUMERICAS
 
 
 def criar_preprocessador():
-    """
-    Numéricos  : imputação pela mediana -> StandardScaler (mesma ideia do código da aula)
-    Categóricos: imputação pela moda    -> OneHotEncoder (handle_unknown='ignore' evita erro
-                 se aparecer uma categoria no teste que não existia no treino)
-    """
+    """Numéricos: mediana + StandardScaler. Categóricos: moda + OneHotEncoder (ignora categoria nova no teste)."""
     pipeline_numerico = Pipeline([
         ("imputar", SimpleImputer(strategy="median")),
         ("padronizar", StandardScaler()),
@@ -50,7 +42,7 @@ def ajustar_e_transformar(preprocessador, X_train, X_val, X_test):
 
 
 def para_tensores(X, y, device):
-    """Converte numpy/pandas em tensores do PyTorch (float32 para X, long para y), como no código da aula."""
+    """Converte para tensores: float32 em X, long em y."""
     X_t = torch.tensor(np.asarray(X, dtype=np.float32), dtype=torch.float32).to(device)
     y_t = torch.tensor(np.asarray(y), dtype=torch.long).to(device)
     return X_t, y_t

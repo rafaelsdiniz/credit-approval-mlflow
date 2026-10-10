@@ -1,21 +1,11 @@
 """
-Pipeline principal: treino -> validação -> teste, com rastreamento no MLflow.
+Pipeline treino -> validação -> teste com rastreamento no MLflow.
 
-Baseado em mlp_torch_avaliacao.py (código da aula, repositório sousamaf/AI-Lab):
-mesma rede (nn.Module), mesma perda (CrossEntropyLoss), mesmo otimizador (Adam),
-mesmo loop manual de treino/validação e mesmas métricas (precision, recall, F1, matriz de confusão).
+Baseado em mlp_torch_avaliacao.py (aula, sousamaf/AI-Lab): mesma rede, perda, otimizador e métricas.
+Mudanças: dataset Credit Approval, fit do pré-processador só no treino, mini-batches, seeds fixas,
+early stopping pela val_loss e tudo configurável por YAML (+ --set) e registrado no MLflow.
 
-O que mudou (e por quê):
-  * dataset Credit Approval no lugar do Iris (2 classes: rejeitado / aprovado);
-  * pré-processamento ajustado SÓ no treino (corrige o vazamento de dados do original);
-  * mini-batches com DataLoader, seeds fixas e early stopping pela val_loss;
-  * tudo configurável por YAML (+ --set) e registrado no MLflow (params, métricas por época,
-    artefatos, modelo e trace das etapas);
-  * figuras salvas como artefatos em vez de plt.show().
-
-Uso:
-  python -m src.train --config configs/run_a_referencia.yaml
-  python -m src.train --config configs/run_a_referencia.yaml --set treino.lr=0.005 --set experimento.run_name=A_lr_0005
+Uso: python -m src.train --config configs/run_a_referencia.yaml [--set treino.lr=0.005]
 """
 
 import argparse
@@ -26,7 +16,7 @@ import tempfile
 import joblib
 import matplotlib
 
-matplotlib.use("Agg")  # backend sem janela: as figuras são salvas em arquivo, não exibidas
+matplotlib.use("Agg")  # sem janela: figuras vão para arquivo
 import matplotlib.pyplot as plt
 import mlflow
 import mlflow.pytorch
@@ -59,17 +49,11 @@ from src.model import MLP
 NOMES_CLASSES = ["Rejeitado (-)", "Aprovado (+)"]
 
 
-# ----------------------------------------------------------------------------------
-# Funções auxiliares
-# ----------------------------------------------------------------------------------
 def fixar_seeds(seed):
     """
-    Fixa as fontes de aleatoriedade usadas no treino (numpy, torch e o split do sklearn,
-    que recebe random_state=seed) para que a run seja reproduzível.
-
-    Atenção: NÃO fixamos o módulo `random` do Python de propósito. O MLflow Tracing usa
-    esse módulo para gerar os IDs de trace/span; se ele fosse fixado, todas as runs
-    gerariam o MESMO ID e os traces se sobrescreveriam.
+    Fixa numpy e torch (o split do sklearn recebe random_state=seed).
+    O módulo `random` fica de fora de propósito: o MLflow Tracing o usa para gerar os IDs
+    de trace, e com ele fixado todas as runs teriam o mesmo ID.
     """
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -77,7 +61,7 @@ def fixar_seeds(seed):
 
 
 def escolher_device():
-    """Mesma lógica do código da aula: mps (Mac) > cuda (GPU NVIDIA) > cpu."""
+    """mps > cuda > cpu, como na aula."""
     if torch.backends.mps.is_available():
         return torch.device("mps")
     if torch.cuda.is_available():
@@ -86,15 +70,11 @@ def escolher_device():
 
 
 def avaliar(modelo, X, y, criterio):
-    """
-    Calcula perda, acurácia, precision, recall, F1 e ROC-AUC em um conjunto.
-    precision/recall/F1 usam average='macro' como no código da aula (média das duas classes).
-    """
+    """Perda, acurácia, precision/recall/F1 (macro, como na aula) e ROC-AUC em um conjunto."""
     modelo.eval()
     with torch.no_grad():
         logits = modelo(X)
         perda = criterio(logits, y).item()
-        # softmax -> probabilidade de cada classe; a coluna 1 é a probabilidade de "aprovado"
         probas = torch.softmax(logits, dim=1)[:, 1].cpu().numpy()
         y_pred = logits.argmax(dim=1).cpu().numpy()
     y_true = y.cpu().numpy()
@@ -151,9 +131,6 @@ def registrar_modelo(modelo, exemplo_entrada):
         mlflow.pytorch.log_model(modelo, artifact_path="modelo", input_example=exemplo_entrada)
 
 
-# ----------------------------------------------------------------------------------
-# Pipeline
-# ----------------------------------------------------------------------------------
 def executar(config):
     fixar_seeds(config["seed"])
     device = escolher_device()
@@ -168,21 +145,20 @@ def executar(config):
     with mlflow.start_run(run_name=cfg_exp["run_name"]) as run:
         print(f"Run id: {run.info.run_id}")
 
-        # --- Tags e parâmetros: o "contexto" da run -------------------------------
         mlflow.set_tags({
             "pergunta": cfg_exp["pergunta"],
-            "hipotese": cfg_exp.get("hipotese", ""),   # por que esta rodada está sendo executada
+            "hipotese": cfg_exp.get("hipotese", ""),
             "dataset": "Credit Approval (UCI id=27)",
             "device": str(device),
             "codigo_base": "AI-Lab/mlp_torch_avaliacao.py",
         })
         mlflow.log_params(achatar_config(config))
 
-        # Um trace por run, com um span (etapa) para preparar, treinar e validar/testar.
+        # Um trace por run, com um span por etapa
         with mlflow.start_span(name="pipeline_credit_approval") as span_raiz:
             span_raiz.set_inputs({"config": config})
 
-            # ==================== 1) PREPARAR DADOS ====================
+            # 1) preparar dados
             with mlflow.start_span(name="preparar_dados") as span:
                 df, origem = carregar_dados(cfg_dados["caminho_local"], cfg_dados["uci_id"])
                 mlflow.set_tag("origem_dados", origem)
@@ -191,11 +167,9 @@ def executar(config):
                     df, cfg_dados["frac_val"], cfg_dados["frac_test"], config["seed"],
                     estratificado=cfg_dados.get("estratificado", True),
                 )
-                # Registra COMO os dados foram divididos: índice de cada linha e o conjunto para onde foi.
-                # Com a mesma seed esse arquivo é idêntico em todas as rodadas (prova de que o split não mudou).
+                # Idêntico em todas as rodadas com a mesma seed: prova que o split não mudou
                 mlflow.log_text(descrever_divisao(X_train, X_val, X_test, y_train, y_val, y_test),
                                 "divisao_dados.csv")
-                # Pré-processador ajustado SÓ no treino (correção do vazamento de dados)
                 preprocessador = criar_preprocessador()
                 Xtr, Xva, Xte = ajustar_e_transformar(preprocessador, X_train, X_val, X_test)
 
@@ -203,7 +177,7 @@ def executar(config):
                 X_val_t, y_val_t = para_tensores(Xva, y_val, device)
                 X_test_t, y_test_t = para_tensores(Xte, y_test, device)
 
-                # DataLoader embaralha e divide o treino em mini-batches (o original era full-batch)
+                # Mini-batches embaralhados (o original era full-batch)
                 gerador = torch.Generator().manual_seed(config["seed"])
                 loader_treino = DataLoader(
                     TensorDataset(X_train_t, y_train_t),
@@ -220,7 +194,7 @@ def executar(config):
                 span.set_outputs(tamanhos)
                 print(f"Dados: {tamanhos}")
 
-            # ==================== 2) TREINAR ====================
+            # 2) treinar
             with mlflow.start_span(name="treinar") as span:
                 span.set_inputs(cfg_treino | cfg_modelo)
 
@@ -242,7 +216,6 @@ def executar(config):
                 epocas_sem_melhora = 0
 
                 for epoca in range(1, cfg_treino["epocas"] + 1):
-                    # ---- treino (um passo por mini-batch) ----
                     modelo.train()
                     soma_perda, acertos, total = 0.0, 0, 0
                     for xb, yb in loader_treino:
@@ -259,7 +232,6 @@ def executar(config):
                     train_loss = soma_perda / total
                     train_acc = acertos / total
 
-                    # ---- validação (sem gradiente, como no código da aula) ----
                     modelo.eval()
                     with torch.no_grad():
                         saidas_val = modelo(X_val_t)
@@ -268,14 +240,13 @@ def executar(config):
 
                     for nome, valor in zip(historico, (train_loss, val_loss, train_acc, val_acc)):
                         historico[nome].append(valor)
-                    # step=epoca permite ver a curva no MLflow
                     mlflow.log_metrics(
                         {"train_loss": train_loss, "val_loss": val_loss,
                          "train_accuracy": train_acc, "val_accuracy": val_acc},
                         step=epoca,
                     )
 
-                    # ---- early stopping: guarda os pesos da melhor época pela val_loss ----
+                    # early stopping: guarda os pesos da melhor val_loss
                     if val_loss < melhor_val_loss:
                         melhor_val_loss = val_loss
                         melhor_epoca = epoca
@@ -294,24 +265,23 @@ def executar(config):
                         break
 
                 epocas_executadas = epoca
-                modelo.load_state_dict(melhores_pesos)  # volta para o melhor modelo
+                modelo.load_state_dict(melhores_pesos)
                 mlflow.log_metrics({"melhor_epoca": melhor_epoca, "epocas_executadas": epocas_executadas})
                 mlflow.log_figure(plotar_curvas(historico, melhor_epoca), "curvas_treinamento.png")
                 span.set_outputs({"melhor_epoca": melhor_epoca, "epocas_executadas": epocas_executadas,
                                   "melhor_val_loss": melhor_val_loss})
 
-            # ==================== 3) VALIDAR E TESTAR ====================
+            # 3) validar e testar
             with mlflow.start_span(name="validar_e_testar") as span:
                 span.set_inputs({"melhor_epoca": melhor_epoca})
 
-                # Métricas finais na validação (base da escolha entre runs)
                 res_val = avaliar(modelo, X_val_t, y_val_t, criterio)
                 mlflow.log_metrics({
                     "val_accuracy_final": res_val["accuracy"], "val_precision": res_val["precision"],
                     "val_recall": res_val["recall"], "val_f1": res_val["f1"], "val_roc_auc": res_val["roc_auc"],
                 })
 
-                # O TESTE é usado UMA única vez, aqui, com o modelo da melhor época
+                # O teste é usado uma única vez, aqui, com os pesos da melhor época
                 res_test = avaliar(modelo, X_test_t, y_test_t, criterio)
                 mlflow.log_metrics({
                     "test_loss": res_test["loss"], "test_accuracy": res_test["accuracy"],
@@ -319,7 +289,6 @@ def executar(config):
                     "test_f1": res_test["f1"], "test_roc_auc": res_test["roc_auc"],
                 })
 
-                # Artefatos: matriz de confusão, classification report, config, pré-processador e modelo
                 mlflow.log_figure(plotar_matriz_confusao(res_test["y_true"], res_test["y_pred"]),
                                   "matriz_confusao_teste.png")
                 relatorio = classification_report(res_test["y_true"], res_test["y_pred"],
